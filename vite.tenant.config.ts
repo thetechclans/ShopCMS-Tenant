@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       input: path.resolve(__dirname, "tenant.html"),
     },
-    outDir: "dist-tenant",
+    outDir: "dist",
     emptyOutDir: true,
   },
 }));
