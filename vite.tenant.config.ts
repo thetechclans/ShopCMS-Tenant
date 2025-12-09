@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => ({
   root: ".",
   server: {
     host: "0.0.0.0",
-    port: 5172,
+    port: 5171,
     strictPort: true,
     allowedHosts: true,
     hmr: {
@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     rollupOptions: {
-      input: path.resolve(__dirname, "tenant.html"),
+      input: path.resolve(__dirname, "index.html"),
     },
     outDir: "dist",
     emptyOutDir: true,
