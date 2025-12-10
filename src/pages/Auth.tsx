@@ -131,7 +131,9 @@ const Auth = () => {
     setLoading(true);
 
     try {
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       const { data, error } = await supabase.functions.invoke('tenant-signup', {
+        headers: anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined,
         body: {
           email,
           password,
