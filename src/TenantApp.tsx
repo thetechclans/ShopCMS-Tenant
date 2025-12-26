@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import AdminLayout from "./components/AdminLayout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
@@ -14,10 +14,27 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import HomePageBuilder from "./pages/HomePageBuilder";
 import { TenantProvider } from "./contexts/TenantContext";
+import Analytics from "./pages/Analytics";
 import CategoryProducts from "./pages/CategoryProducts";
 import StaticPage from "./pages/StaticPage";
 import ProductDetail from "./pages/ProductDetail";
 import PublicHome from "./pages/PublicHome";
+import { useEffect } from "react";
+import { useAnalytics } from "./lib/analytics";
+import FaviconManager from "./components/FaviconManager";
+import DynamicHead from "./components/DynamicHead";
+import TenantRealtimeInvalidator from "./components/TenantRealtimeInvalidator";
+
+const RouteAnalyticsTracker = () => {
+  const location = useLocation();
+  const { trackPageView } = useAnalytics();
+
+  useEffect(() => {
+    trackPageView(location.pathname + location.search);
+  }, [location.pathname, location.search, trackPageView]);
+
+  return null;
+};
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +54,10 @@ const TenantApp = () => (
       <Sonner />
       <TenantProvider>
         <BrowserRouter>
+          <FaviconManager />
+          <DynamicHead />
+          <TenantRealtimeInvalidator />
+          <RouteAnalyticsTracker />
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<PublicHome />} />
@@ -53,6 +74,7 @@ const TenantApp = () => (
             <Route path="/admin/pages/home-builder" element={<AdminLayout><HomePageBuilder /></AdminLayout>} />
             <Route path="/admin/settings" element={<AdminLayout><Settings /></AdminLayout>} />
             <Route path="/admin/users" element={<AdminLayout><Users /></AdminLayout>} />
+            <Route path="/admin/analytics" element={<AdminLayout><Analytics /></AdminLayout>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

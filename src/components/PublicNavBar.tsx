@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 import { useTenant } from "@/contexts/TenantContext";
+import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface MenuItem {
   label: string;
@@ -20,42 +21,91 @@ interface NavBarConfig {
 }
 
 export const PublicNavBar = () => {
-  const { tenant } = useTenant();
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [config, setConfig] = useState<NavBarConfig | null>(null);
+  const { tenant, isLoading: tenantLoading } = useTenant();
+  const tenantId = tenant?.id ?? null;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    if (tenant?.id) {
-      loadNavBarData();
-    }
-  }, [tenant?.id]);
-
-  const loadNavBarData = async () => {
-    if (!tenant?.id) return;
-    
-    const [menuRes, configRes] = await Promise.all([
-      supabase
+  const {
+    data: menuItems = [],
+    isLoading: menuLoading,
+  } = useQuery({
+    queryKey: ["menu-items", tenantId],
+    enabled: !!tenantId,
+    queryFn: async (): Promise<MenuItem[]> => {
+      if (!tenantId) return [];
+      const { data, error } = await supabase
         .from("menu_items")
-        .select("*")
-        .eq("tenant_id", tenant.id)
+        .select("label, url")
+        .eq("tenant_id", tenantId)
         .eq("is_published", true)
-        .order("display_order"),
-      supabase
+        .order("display_order", { ascending: true });
+
+      if (error) {
+        console.error("Failed to load menu items:", error);
+        return [];
+      }
+      return (data ?? []) as MenuItem[];
+    },
+    staleTime: 0,
+    refetchOnMount: "always",
+    // Freshness is primarily handled by realtime invalidation; avoid extra UI
+    // churn on tab focus.
+    refetchOnWindowFocus: false,
+  });
+
+  const {
+    data: config,
+    isLoading: configLoading,
+  } = useQuery({
+    queryKey: ["navbar-config", tenantId],
+    enabled: !!tenantId,
+    queryFn: async (): Promise<NavBarConfig | null> => {
+      if (!tenantId) return null;
+      const { data, error } = await supabase
         .from("navbar_config")
         .select("*")
-        .eq("tenant_id", tenant.id)
+        .eq("tenant_id", tenantId)
         .eq("is_published", true)
-        .single(),
-    ]);
+        .maybeSingle();
 
-    if (menuRes.data) {
-      setMenuItems(menuRes.data);
-    }
-    if (configRes.data) {
-      setConfig(configRes.data);
-    }
-  };
+      if (error) {
+        console.error("Failed to load navbar config:", error);
+        return null;
+      }
+      return (data ?? null) as NavBarConfig | null;
+    },
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+
+  // Rule: never show "fake" navbar content (like default "Shop") while the
+  // tenant/config/menu is still loading — show a skeleton instead.
+  const hasNavbarData = !!config || menuItems.length > 0;
+  const isLoading = tenantLoading || menuLoading || configLoading || (!tenantId && !hasNavbarData);
+  if (isLoading) {
+    return (
+      <nav className="border-b">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-10 w-10 rounded-md" />
+              <Skeleton className="h-5 w-32" />
+            </div>
+            <div className="hidden md:flex items-center gap-6">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-12 ml-4" />
+            </div>
+            <Skeleton className="md:hidden h-9 w-9 rounded-md" />
+          </div>
+        </div>
+      </nav>
+    );
+  }
+
+  const brandText = config?.brand_text || tenant?.name || "Shop";
 
   const navStyle = config
     ? {
@@ -72,7 +122,7 @@ export const PublicNavBar = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to={config?.logo_link_to_home ? "/" : "#"} className="flex items-center">
+          <Link to={config?.logo_link_to_home === false ? "#" : "/"} className="flex items-center">
             {config?.logo_url ? (
               <img
                 src={config.logo_url}
@@ -80,7 +130,7 @@ export const PublicNavBar = () => {
                 className="h-10 w-auto object-contain"
               />
             ) : (
-              <span className="text-xl font-bold">{config?.brand_text || "Shop"}</span>
+                <span className="text-xl font-bold">{brandText}</span>
             )}
           </Link>
 
@@ -95,13 +145,13 @@ export const PublicNavBar = () => {
                 {item.label}
               </Link>
             ))}
-            <Link
+            {/* <Link
               to="/auth"
               className="text-sm opacity-70 hover:opacity-100 transition-opacity ml-4 border-l pl-4"
               style={{ borderColor: config?.text_color || 'currentColor' }}
             >
               Admin
-            </Link>
+            </Link> */}
           </div>
 
           {/* Mobile Menu Button */}
@@ -131,14 +181,14 @@ export const PublicNavBar = () => {
                   {item.label}
                 </Link>
               ))}
-              <Link
+              {/* <Link
                 to="/auth"
                 className="text-sm opacity-70 hover:opacity-100 transition-opacity pt-4 border-t"
                 style={{ borderColor: config?.text_color || 'currentColor' }}
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Admin Login
-              </Link>
+              </Link> */}
             </div>
           </div>
         )}

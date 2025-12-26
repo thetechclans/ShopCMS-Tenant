@@ -10,9 +10,10 @@ import { ImageUpload } from "@/components/ImageUpload";
 import { whatsappSchema } from "@/lib/validationSchemas";
 import { ThemeSelector } from "@/components/ThemeSelector";
 import { useTenant } from "@/contexts/TenantContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlanBadge } from "@/components/PlanBadge";
 import { UsageMeter } from "@/components/UsageMeter";
+import { normalizePlanType, isAtLeastPlan, type PlanType } from "@/lib/plans";
 
 interface Profile {
   shop_name: string;
@@ -24,6 +25,7 @@ interface Profile {
 
 const Settings = () => {
   const { tenantId } = useTenant();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState<Profile>({
     shop_name: "",
@@ -51,7 +53,10 @@ const Settings = () => {
     enabled: !!tenantId,
   });
 
-  const isGoldTier = tenantLimits?.plan_type === 'gold';
+  const planType: PlanType | null = tenantLimits?.plan_type
+    ? normalizePlanType(tenantLimits.plan_type)
+    : null;
+  const isGoldTier = planType ? isAtLeastPlan(planType, "gold") : false;
 
   // Fetch current usage counts
   const { data: usageCounts } = useQuery({
@@ -130,6 +135,11 @@ const Settings = () => {
       console.error(error);
     } else {
       toast.success("Settings updated successfully");
+      // Refetch profile so the latest favicon/site_title are reflected
+      await fetchProfile();
+      if (tenantId) {
+        queryClient.invalidateQueries({ queryKey: ["tenant-site-config", tenantId] });
+      }
     }
   };
 
@@ -140,8 +150,8 @@ const Settings = () => {
           <h1 className="text-3xl font-bold">Settings</h1>
           <p className="text-muted-foreground">Manage your shop settings</p>
         </div>
-        {tenantLimits && (
-          <PlanBadge planType={tenantLimits.plan_type as 'basic' | 'silver' | 'gold'} size="lg" />
+        {planType && (
+          <PlanBadge planType={planType} size="lg" />
         )}
       </div>
 
@@ -253,6 +263,7 @@ const Settings = () => {
               value={profile.favicon_url || ""}
               onChange={(url) => setProfile({ ...profile, favicon_url: url })}
               path="favicons"
+              variant="icon"
             />
             <p className="text-xs text-muted-foreground">
               Upload a square image (recommended: 32x32 or 64x64 pixels). This icon appears in the browser tab.

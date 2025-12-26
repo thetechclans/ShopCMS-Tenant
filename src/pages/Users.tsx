@@ -78,6 +78,9 @@ const Users = () => {
       return data as Profile[];
     },
     enabled: !!tenant?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const createUserMutation = useMutation({
@@ -117,7 +120,7 @@ const Users = () => {
     },
     onSuccess: () => {
       toast.success("User created successfully");
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users", tenant?.id] });
       setOpen(false);
       setEmail("");
       setPassword("");
@@ -151,7 +154,7 @@ const Users = () => {
     },
     onSuccess: () => {
       toast.success("User deleted successfully");
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users", tenant?.id] });
       setDeleteUserId(null);
     },
     onError: (error: Error) => {

@@ -36,13 +36,14 @@ interface AdminLayoutProps {
   children: ReactNode;
 }
 
-const menuItems = [
+const baseMenuItems = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
   { title: "Products", url: "/admin/products", icon: Package },
   { title: "Categories", url: "/admin/categories", icon: FolderOpen },
   { title: "Pages", url: "/admin/pages", icon: FileText },
   { title: "Settings", url: "/admin/settings", icon: Settings },
   { title: "Users", url: "/admin/users", icon: Settings },
+  // Analytics menu item is added at runtime based on plan
 ];
 
 const AppSidebar = () => {
@@ -52,6 +53,13 @@ const AppSidebar = () => {
   const navigate = useNavigate();
   const currentPath = location.pathname;
   const isCollapsed = state === "collapsed";
+
+  const menuItems = [
+    ...baseMenuItems,
+    ...(features.hasAnalytics
+      ? [{ title: "Analytics", url: "/admin/analytics", icon: LayoutDashboard }]
+      : []),
+  ];
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
