@@ -11,6 +11,7 @@ import { PublicNavBar } from "@/components/PublicNavBar";
 import { PublicFooter } from "@/components/PublicFooter";
 import DynamicHead from "@/components/DynamicHead";
 import { useTenant } from "@/contexts/TenantContext";
+import { useAnalytics } from "@/lib/analytics";
 
 interface ProductImage {
   id: string;
@@ -53,6 +54,7 @@ const ProductDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { tenant } = useTenant();
+  const { trackProductView } = useAnalytics();
   
   const [product, setProduct] = useState<Product | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
@@ -164,6 +166,12 @@ const ProductDetail = () => {
           setWhatsappNumber(profileData.whatsapp_number);
         }
       }
+
+      // Track product view for analytics
+      trackProductView(productData.id, {
+        slug,
+        category_id: productData.category_id,
+      });
 
       setLoading(false);
     } catch (error) {

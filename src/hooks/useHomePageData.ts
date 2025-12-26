@@ -43,7 +43,7 @@ const fetchCategories = async (tenantId: string): Promise<Category[]> => {
 };
 
 export const useHomePageData = () => {
-  const { tenant } = useTenant();
+  const { tenant, isLoading: tenantLoading } = useTenant();
   
   const slidesQuery = useQuery({
     queryKey: ["carousel-slides", tenant?.id],
@@ -52,7 +52,11 @@ export const useHomePageData = () => {
       return fetchCarouselSlides(tenant.id);
     },
     enabled: !!tenant?.id,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    // CMS content must always be current. We prefer a fresh fetch on mount and
+    // show loading/skeletons while fetching instead of showing stale data.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const categoriesQuery = useQuery({
@@ -62,13 +66,20 @@ export const useHomePageData = () => {
       return fetchCategories(tenant.id);
     },
     enabled: !!tenant?.id,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
+
+  const isFetching = slidesQuery.isFetching || categoriesQuery.isFetching;
+  const isInitialLoading = tenantLoading || slidesQuery.isLoading || categoriesQuery.isLoading;
 
   return {
     slides: slidesQuery.data || [],
     categories: categoriesQuery.data || [],
-    isLoading: slidesQuery.isLoading || categoriesQuery.isLoading,
+    isLoading: isInitialLoading || isFetching,
+    isFetching,
+    isInitialLoading,
     isError: slidesQuery.isError || categoriesQuery.isError,
     error: slidesQuery.error || categoriesQuery.error,
   };
