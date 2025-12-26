@@ -43,6 +43,10 @@ export const ThemeSelector = () => {
       if (error) throw error;
       return data;
     },
+    enabled: !!tenantId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   // Mutation to update theme
@@ -59,7 +63,7 @@ export const ThemeSelector = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["profile-theme"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-theme", tenantId] });
       toast.success("Theme updated successfully!");
     },
     onError: (error) => {

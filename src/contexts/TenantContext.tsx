@@ -45,33 +45,33 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         console.log('Detecting tenant for hostname:', hostname);
         
         // First priority: Check if on platform domain (serves both landing and admin)
-        if (isPlatformDomain(hostname)) {
-          setIsPlatform(true);
-          setTenant(null);
-          setIsLoading(false);
-          return;
-        }
+        // if (isPlatformDomain(hostname)) {
+        //   setIsPlatform(true);
+        //   setTenant(null);
+        //   setIsLoading(false);
+        //   return;
+        // }
 
         // Dev/local fallback: allow setting a default tenant slug for localhost
-        if (hostname === "localhost" || hostname === "127.0.0.1") {
-          const devSlug = import.meta.env.VITE_DEV_TENANT_SLUG;
-          if (devSlug) {
-            const { data, error } = await supabase
-              .from('tenants')
-              .select('*')
-              .eq('slug', devSlug)
-              .eq('status', 'active')
-              .maybeSingle();
+        // if (hostname === "localhost" || hostname === "127.0.0.1") {
+        //   const devSlug = import.meta.env.VITE_DEV_TENANT_SLUG;
+        //   if (devSlug) {
+        //     const { data, error } = await supabase
+        //       .from('tenants')
+        //       .select('*')
+        //       .eq('slug', devSlug)
+        //       .eq('status', 'active')
+        //       .maybeSingle();
 
-            if (error) {
-              console.error('Error fetching tenant by dev slug:', error);
-            } else if (data) {
-              setTenant(data);
-              setIsLoading(false);
-              return;
-            }
-          }
-        }
+        //     if (error) {
+        //       console.error('Error fetching tenant by dev slug:', error);
+        //     } else if (data) {
+        //       setTenant(data);
+        //       setIsLoading(false);
+        //       return;
+        //     }
+        //   }
+        // }
 
         // Domain-based resolution (custom domain or platform subdomain)
         const parts = hostname.split('.');

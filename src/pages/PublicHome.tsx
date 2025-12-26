@@ -9,11 +9,11 @@ import { useTenant } from "@/contexts/TenantContext";
 type PageSection = CategorySectionData | TextSectionData;
 
 const PublicHome = () => {
-  const { tenant } = useTenant();
+  const { tenant, isLoading: tenantLoading } = useTenant();
   const tenantId = tenant?.id;
-  const { slides, categories, isLoading: homeDataLoading } = useHomePageData();
+  const { slides, categories, isLoading: homeDataLoading, isFetching: homeDataFetching } = useHomePageData();
 
-  const { data: sections = [], isLoading: sectionsLoading } = useQuery({
+  const { data: sections = [], isLoading: sectionsLoading, isFetching: sectionsFetching } = useQuery({
     queryKey: ["home-page-sections", tenantId],
     queryFn: async (): Promise<PageSection[]> => {
       if (!tenantId) return [];
@@ -35,10 +35,19 @@ const PublicHome = () => {
       }
     },
     enabled: !!tenantId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
-  const isLoading = homeDataLoading || sectionsLoading;
+  // We treat any "fetching" state as loading to avoid showing stale CMS content.
+  // If the tenant is not resolved yet, show a skeleton rather than template fallback content.
+  const isLoading =
+    tenantLoading ||
+    homeDataLoading ||
+    homeDataFetching ||
+    sectionsLoading ||
+    sectionsFetching;
 
   return (
     <TenantTemplateRouter

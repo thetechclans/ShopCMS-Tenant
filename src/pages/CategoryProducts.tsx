@@ -8,6 +8,7 @@ import { PublicNavBar } from "@/components/PublicNavBar";
 import { PublicFooter } from "@/components/PublicFooter";
 import DynamicHead from "@/components/DynamicHead";
 import { useTenant } from "@/contexts/TenantContext";
+import { useAnalytics } from "@/lib/analytics";
 
 interface Product {
   id: string;
@@ -31,6 +32,7 @@ const CategoryProducts = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { tenant } = useTenant();
+  const { trackCategoryView } = useAnalytics();
   const [category, setCategory] = useState<Category | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +61,11 @@ const CategoryProducts = () => {
     }
 
     setCategory(categoryData);
+
+    // Track category view for analytics
+    trackCategoryView(categoryData.id, {
+      slug,
+    });
 
     // Fetch products for this category with images
     const { data: productsData, error: productsError } = await supabase
