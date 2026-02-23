@@ -16,6 +16,8 @@ interface TenantContextType {
   isLoading: boolean;
   error: string | null;
   isPlatformDomain: boolean;
+  isSubscriptionActive: boolean;
+  subscriptionExpiresAt: string | null;
   requireTenant: () => string; // Throws if no tenant
 }
 
@@ -25,6 +27,8 @@ const TenantContext = createContext<TenantContextType>({
   isLoading: true,
   error: null,
   isPlatformDomain: false,
+  isSubscriptionActive: true,
+  subscriptionExpiresAt: null,
   requireTenant: () => {
     throw new Error("Tenant context not initialized");
   },
@@ -37,20 +41,24 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPlatform, setIsPlatform] = useState(false);
+  const [isSubscriptionActive, setIsSubscriptionActive] = useState(true);
+  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState<string | null>(null);
 
   useEffect(() => {
     const detectTenant = async () => {
       try {
         const hostname = window.location.hostname.toLowerCase();
         console.log('Detecting tenant for hostname:', hostname);
-        
+
         // First priority: Check if on platform domain (serves both landing and admin)
-        // if (isPlatformDomain(hostname)) {
-        //   setIsPlatform(true);
-        //   setTenant(null);
-        //   setIsLoading(false);
-        //   return;
-        // }
+        if (isPlatformDomain(hostname)) {
+          setIsPlatform(true);
+          setTenant(null);
+          setIsSubscriptionActive(true);
+          setSubscriptionExpiresAt(null);
+          setIsLoading(false);
+          return;
+        }
 
         // Dev/local fallback: allow setting a default tenant slug for localhost
         // if (hostname === "localhost" || hostname === "127.0.0.1") {
@@ -117,21 +125,50 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             console.error('Error fetching tenant:', tenantError);
             setError(null);
             setTenant(null);
+            setIsSubscriptionActive(true);
+            setSubscriptionExpiresAt(null);
           } else if (data) {
             setTenant(data);
+
+            const [{ data: hasActiveSubscription, error: subscriptionError }, { data: limitData, error: limitError }] =
+              await Promise.all([
+                supabase.rpc('has_active_subscription', { p_tenant_id: data.id }),
+                supabase
+                  .from('tenant_limits')
+                  .select('subscription_expires_at')
+                  .eq('tenant_id', data.id)
+                  .maybeSingle(),
+              ]);
+
+            if (subscriptionError) {
+              console.error('Error checking subscription status:', subscriptionError);
+            }
+
+            if (limitError && limitError.code !== 'PGRST116') {
+              console.error('Error fetching subscription expiry:', limitError);
+            }
+
+            setIsSubscriptionActive(Boolean(hasActiveSubscription));
+            setSubscriptionExpiresAt(limitData?.subscription_expires_at ?? null);
           } else {
             setError(null);
             setTenant(null);
+            setIsSubscriptionActive(true);
+            setSubscriptionExpiresAt(null);
           }
         } else {
           // No tenant found - show default empty shop template instead of error
           setTenant(null);
           setError(null); // Clear error to show default template
+          setIsSubscriptionActive(true);
+          setSubscriptionExpiresAt(null);
         }
       } catch (err) {
         console.error('Error detecting tenant:', err);
         setError(null); // Show default template instead of error page
         setTenant(null);
+        setIsSubscriptionActive(true);
+        setSubscriptionExpiresAt(null);
       } finally {
         setIsLoading(false);
       }
@@ -155,6 +192,8 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isLoading, 
         error, 
         isPlatformDomain: isPlatform,
+        isSubscriptionActive,
+        subscriptionExpiresAt,
         requireTenant 
       }}
     >
