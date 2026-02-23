@@ -11,6 +11,7 @@ import Pages from "./pages/Pages";
 import Settings from "./pages/Settings";
 import Users from "./pages/Users";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import HomePageBuilder from "./pages/HomePageBuilder";
 import PublicHome from "./pages/PublicHome";
@@ -107,6 +108,7 @@ const App = () => (
             <Route path="/product/:slug" element={<ProductDetail />} />
             <Route path="/page/:slug" element={<StaticPage />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/auth/reset" element={<ResetPassword />} />
 
             {/* Tenant Admin Routes */}
             <Route path="/admin" element={<AdminLayout><Dashboard /></AdminLayout>} />

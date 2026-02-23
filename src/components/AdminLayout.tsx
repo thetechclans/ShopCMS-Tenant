@@ -122,7 +122,13 @@ const AppSidebar = () => {
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navigate = useNavigate();
-  const { tenant, tenantId, isLoading: tenantLoading } = useTenant();
+  const {
+    tenant,
+    tenantId,
+    isLoading: tenantLoading,
+    isSubscriptionActive,
+    subscriptionExpiresAt,
+  } = useTenant();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [tenantVerified, setTenantVerified] = useState(false);
@@ -196,6 +202,39 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           return;
         }
 
+        if (!isSubscriptionActive) {
+          const expiryLabel = subscriptionExpiresAt
+            ? new Date(subscriptionExpiresAt).toLocaleString()
+            : "the configured expiry date";
+          toast.error(`Subscription expired on ${expiryLabel}. Please contact platform support.`);
+          await supabase.auth.signOut();
+          navigate("/auth");
+          return;
+        }
+
+        const { data: hasActiveSubscription, error: subscriptionError } = await supabase.rpc(
+          "has_active_subscription",
+          { p_tenant_id: tenant.id },
+        );
+
+        if (subscriptionError) {
+          tenantLogger.error(tenantId, "Failed to verify subscription state", subscriptionError);
+          toast.error("Unable to validate subscription state. Please try again.");
+          await supabase.auth.signOut();
+          navigate("/auth");
+          return;
+        }
+
+        if (!hasActiveSubscription) {
+          const expiryLabel = subscriptionExpiresAt
+            ? new Date(subscriptionExpiresAt).toLocaleString()
+            : "the configured expiry date";
+          toast.error(`Subscription expired on ${expiryLabel}. Access is suspended.`);
+          await supabase.auth.signOut();
+          navigate("/auth");
+          return;
+        }
+
         setTenantVerified(true);
         setLoading(false);
       } catch (err) {
@@ -205,7 +244,15 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     };
 
     verifyTenantMembership();
-  }, [session, tenant, tenantId, tenantLoading, navigate]);
+  }, [
+    session,
+    tenant,
+    tenantId,
+    tenantLoading,
+    isSubscriptionActive,
+    subscriptionExpiresAt,
+    navigate,
+  ]);
 
   if (loading || tenantLoading || !tenantVerified) {
     return (
