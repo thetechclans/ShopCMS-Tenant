@@ -1010,6 +1010,10 @@ export type Database = {
       }
     }
     Functions: {
+      has_active_subscription: {
+        Args: { p_tenant_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

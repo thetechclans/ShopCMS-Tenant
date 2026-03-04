@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { isPlatformDomain, PLATFORM_BASE_DOMAIN } from '@/lib/platformConfig';
+import { TENANT_BASE_DOMAIN } from '@/lib/tenantDomainConfig';
 
 interface Tenant {
   id: string;
@@ -15,7 +15,6 @@ interface TenantContextType {
   tenantId: string | null;
   isLoading: boolean;
   error: string | null;
-  isPlatformDomain: boolean;
   isSubscriptionActive: boolean;
   subscriptionExpiresAt: string | null;
   requireTenant: () => string; // Throws if no tenant
@@ -26,7 +25,6 @@ const TenantContext = createContext<TenantContextType>({
   tenantId: null,
   isLoading: true,
   error: null,
-  isPlatformDomain: false,
   isSubscriptionActive: true,
   subscriptionExpiresAt: null,
   requireTenant: () => {
@@ -34,31 +32,21 @@ const TenantContext = createContext<TenantContextType>({
   },
 });
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useTenant = () => useContext(TenantContext);
 
 export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isPlatform, setIsPlatform] = useState(false);
   const [isSubscriptionActive, setIsSubscriptionActive] = useState(true);
   const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState<string | null>(null);
 
   useEffect(() => {
     const detectTenant = async () => {
       try {
-        const hostname = window.location.hostname.toLowerCase();
+        const hostname = window.location.hostname.toLowerCase().replace(/\.$/, '');
         console.log('Detecting tenant for hostname:', hostname);
-
-        // First priority: Check if on platform domain (serves both landing and admin)
-        if (isPlatformDomain(hostname)) {
-          setIsPlatform(true);
-          setTenant(null);
-          setIsSubscriptionActive(true);
-          setSubscriptionExpiresAt(null);
-          setIsLoading(false);
-          return;
-        }
 
         // Dev/local fallback: allow setting a default tenant slug for localhost
         // if (hostname === "localhost" || hostname === "127.0.0.1") {
@@ -81,19 +69,30 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         //   }
         // }
 
-        // Domain-based resolution (custom domain or platform subdomain)
+        // Domain-based resolution (custom domain or shared-base subdomain)
         const parts = hostname.split('.');
         console.log('Hostname parts:', parts);
         let tenantQuery;
 
-        // Custom domain (exact match, strip only leading www)
-        const normalizedDomain = parts[0] === 'www' ? parts.slice(1).join('.') : hostname;
-        const { data: domainData, error: domainError } = await supabase
+        // Custom domain lookup (supports both with/without leading www)
+        const domainCandidates = Array.from(
+          new Set(
+            [
+              hostname,
+              parts[0] === 'www' ? parts.slice(1).join('.') : `www.${hostname}`,
+            ].filter((value) => value.length > 0),
+          ),
+        );
+
+        const { data: domainRows, error: domainError } = await supabase
           .from('tenant_domains')
-          .select('tenant_id')
-          .eq('domain', normalizedDomain)
+          .select('tenant_id, is_primary')
+          .in('domain', domainCandidates)
           .eq('is_verified', true)
-          .maybeSingle();
+          .order('is_primary', { ascending: false })
+          .limit(1);
+
+        const domainData = domainRows?.[0] ?? null;
 
         if (domainError) {
           console.error('Error fetching domain:', domainError);
@@ -106,8 +105,8 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             .eq('id', domainData.tenant_id)
             .eq('status', 'active')
             .maybeSingle();
-        } else if (hostname.endsWith(PLATFORM_BASE_DOMAIN) && parts.length >= 3) {
-          // Platform subdomain pattern (e.g., shop.<platform-domain>)
+        } else if (TENANT_BASE_DOMAIN && hostname.endsWith(`.${TENANT_BASE_DOMAIN}`) && parts.length >= 3) {
+          // Tenant subdomain pattern (e.g., shop.<base-domain>)
           const subdomain = parts[0];
           
           tenantQuery = supabase
@@ -128,6 +127,7 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             setIsSubscriptionActive(true);
             setSubscriptionExpiresAt(null);
           } else if (data) {
+            setError(null);
             setTenant(data);
 
             const [{ data: hasActiveSubscription, error: subscriptionError }, { data: limitData, error: limitError }] =
@@ -191,7 +191,6 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         tenantId: tenant?.id || null,
         isLoading, 
         error, 
-        isPlatformDomain: isPlatform,
         isSubscriptionActive,
         subscriptionExpiresAt,
         requireTenant 

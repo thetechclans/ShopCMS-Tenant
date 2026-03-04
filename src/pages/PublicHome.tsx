@@ -35,9 +35,10 @@ const PublicHome = () => {
       }
     },
     enabled: !!tenantId,
-    staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   // We treat any "fetching" state as loading to avoid showing stale CMS content.
