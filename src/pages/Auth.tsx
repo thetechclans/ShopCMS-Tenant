@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,7 +15,6 @@ const Auth = () => {
   const {
     tenant,
     tenantId,
-    isPlatformDomain,
     isLoading: tenantLoading,
     isSubscriptionActive,
     subscriptionExpiresAt,
@@ -26,15 +25,17 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [activeTab, setActiveTab] = useState("signin");
+  const [pendingAuthUser, setPendingAuthUser] = useState<User | null>(null);
+  const [lastProcessedUserId, setLastProcessedUserId] = useState<string | null>(null);
 
-  const getExpiryLabel = () => {
+  const getExpiryLabel = useCallback(() => {
     if (!subscriptionExpiresAt) {
       return "the configured expiry date";
     }
     return new Date(subscriptionExpiresAt).toLocaleString();
-  };
+  }, [subscriptionExpiresAt]);
 
-  const ensureActiveSubscription = async (currentTenantId: string): Promise<boolean> => {
+  const ensureActiveSubscription = useCallback(async (currentTenantId: string): Promise<boolean> => {
     if (!isSubscriptionActive) {
       return false;
     }
@@ -49,9 +50,9 @@ const Auth = () => {
     }
 
     return Boolean(data);
-  };
+  }, [isSubscriptionActive]);
 
-  const routeAfterAuth = async (user: User) => {
+  const routeAfterAuth = useCallback(async (user: User) => {
     setLoading(true);
 
     try {
@@ -61,17 +62,11 @@ const Auth = () => {
         return;
       }
 
-      const [profileRes, rolesRes] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("status, tenant_id")
-          .eq("id", user.id)
-          .single(),
-        supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id),
-      ]);
+      const profileRes = await supabase
+        .from("profiles")
+        .select("status, tenant_id")
+        .eq("id", user.id)
+        .single();
 
       if (profileRes.error || !profileRes.data) {
         toast.error("Error checking account status");
@@ -80,7 +75,6 @@ const Auth = () => {
       }
 
       const profile = profileRes.data;
-      const isSuperAdmin = (rolesRes.data || []).some((r) => r.role === "super_admin");
 
       if (profile.status === "pending") {
         toast.error("Your account is awaiting admin approval");
@@ -91,11 +85,6 @@ const Auth = () => {
       if (profile.status === "suspended") {
         toast.error("Your account has been suspended");
         await supabase.auth.signOut();
-        return;
-      }
-
-      if (isSuperAdmin) {
-        navigate("/platform/admin");
         return;
       }
 
@@ -123,27 +112,42 @@ const Auth = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [ensureActiveSubscription, getExpiryLabel, navigate, tenantId]);
 
   useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session?.user) {
+        setPendingAuthUser(null);
+        setLastProcessedUserId(null);
         return;
       }
 
-      if (tenantLoading && !isPlatformDomain) {
-        return;
-      }
-
-      if (event === "INITIAL_SESSION") {
-        void routeAfterAuth(session.user);
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+        setPendingAuthUser(session.user);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [tenantLoading, isPlatformDomain, tenantId, isSubscriptionActive, subscriptionExpiresAt]);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingAuthUser) {
+      return;
+    }
+
+    if (tenantLoading) {
+      return;
+    }
+
+    if (lastProcessedUserId === pendingAuthUser.id) {
+      return;
+    }
+
+    setLastProcessedUserId(pendingAuthUser.id);
+    void routeAfterAuth(pendingAuthUser);
+  }, [lastProcessedUserId, pendingAuthUser, routeAfterAuth, tenantLoading]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,7 +174,13 @@ const Auth = () => {
       return;
     }
 
-    await routeAfterAuth(data.user);
+    if (!data.user) {
+      setLoading(false);
+      toast.error("Unable to complete sign in. Please try again.");
+      return;
+    }
+
+    setPendingAuthUser(data.user);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {

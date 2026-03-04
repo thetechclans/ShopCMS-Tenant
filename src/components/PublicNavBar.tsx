@@ -46,10 +46,9 @@ export const PublicNavBar = () => {
       }
       return (data ?? []) as MenuItem[];
     },
-    staleTime: 0,
-    refetchOnMount: "always",
-    // Freshness is primarily handled by realtime invalidation; avoid extra UI
-    // churn on tab focus.
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
 
@@ -74,8 +73,9 @@ export const PublicNavBar = () => {
       }
       return (data ?? null) as NavBarConfig | null;
     },
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
 

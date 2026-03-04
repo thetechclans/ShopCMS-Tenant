@@ -206,7 +206,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           const expiryLabel = subscriptionExpiresAt
             ? new Date(subscriptionExpiresAt).toLocaleString()
             : "the configured expiry date";
-          toast.error(`Subscription expired on ${expiryLabel}. Please contact platform support.`);
+          toast.error(`Subscription expired on ${expiryLabel}. Please contact support.`);
           await supabase.auth.signOut();
           navigate("/auth");
           return;
