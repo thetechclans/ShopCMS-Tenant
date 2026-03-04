@@ -54,15 +54,23 @@ interface UserRole {
   role: string;
 }
 
+type TenantAdminRole = "admin" | "shop_owner";
+
 const Users = () => {
   const { tenant, requireTenant } = useTenant();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [shopName, setShopName] = useState("");
-  const [role, setRole] = useState<string>("shop_owner");
+  const [role, setRole] = useState<TenantAdminRole>("shop_owner");
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  const handleRoleChange = (value: string) => {
+    if (value === "admin" || value === "shop_owner") {
+      setRole(value);
+    }
+  };
 
   const { data: profiles = [], isLoading } = useQuery({
     queryKey: ["admin-users", tenant?.id],
@@ -231,12 +239,11 @@ const Users = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="role">Role</Label>
-                  <Select value={role} onValueChange={setRole}>
+                  <Select value={role} onValueChange={handleRoleChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="super_admin">Super Admin</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="shop_owner">Shop Owner</SelectItem>
                     </SelectContent>

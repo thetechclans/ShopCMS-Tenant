@@ -52,11 +52,10 @@ export const useHomePageData = () => {
       return fetchCarouselSlides(tenant.id);
     },
     enabled: !!tenant?.id,
-    // CMS content must always be current. We prefer a fresh fetch on mount and
-    // show loading/skeletons while fetching instead of showing stale data.
-    staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const categoriesQuery = useQuery({
@@ -66,9 +65,10 @@ export const useHomePageData = () => {
       return fetchCategories(tenant.id);
     },
     enabled: !!tenant?.id,
-    staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const isFetching = slidesQuery.isFetching || categoriesQuery.isFetching;
