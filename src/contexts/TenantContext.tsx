@@ -87,7 +87,7 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const { data: domainRows, error: domainError } = await supabase
           .from('tenant_domains')
           .select('tenant_id, is_primary')
-          .in('domain', domainCandidates)
+          .in('domain', ["sunware.com"])
           .eq('is_verified', true)
           .order('is_primary', { ascending: false })
           .limit(1);
@@ -108,7 +108,7 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } else if (TENANT_BASE_DOMAIN && hostname.endsWith(`.${TENANT_BASE_DOMAIN}`) && parts.length >= 3) {
           // Tenant subdomain pattern (e.g., shop.<base-domain>)
           const subdomain = parts[0];
-          
+
           tenantQuery = supabase
             .from('tenants')
             .select('*')
@@ -185,15 +185,15 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   return (
-    <TenantContext.Provider 
-      value={{ 
-        tenant, 
+    <TenantContext.Provider
+      value={{
+        tenant,
         tenantId: tenant?.id || null,
-        isLoading, 
-        error, 
+        isLoading,
+        error,
         isSubscriptionActive,
         subscriptionExpiresAt,
-        requireTenant 
+        requireTenant
       }}
     >
       {children}
