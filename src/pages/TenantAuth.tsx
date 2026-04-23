@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useTenant } from "@/contexts/TenantContext";
 
-const Auth = () => {
+const TenantAuth = () => {
   const navigate = useNavigate();
   const {
     tenant,
@@ -400,4 +400,4 @@ const Auth = () => {
   );
 };
 
-export default Auth;
+export default TenantAuth;

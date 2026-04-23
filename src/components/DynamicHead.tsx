@@ -7,7 +7,7 @@ const DynamicHead = () => {
   const resolvedTitle =
     (siteTitle && siteTitle.trim().length > 0 ? siteTitle : null) ??
     (shopName && shopName.trim().length > 0 ? shopName : null) ??
-    "ShopCMS";
+    "Platform Admin";
 
   return (
     <Helmet>

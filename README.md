@@ -1,215 +1,235 @@
-# ShopCMS-Tenant – Tenant Storefront & Admin
+# Get Changes
+git diff --patch origin/Original_Code_v3-3..Development > changes.patch
 
-This repo is the **tenant-facing application** for ShopCMS. Each tenant (shop) gets:
 
-- A public storefront (home page, category pages, product detail pages, static pages).
-- An authenticated admin area (`/admin/*`) for managing products, categories, pages, users, settings, home page layout – and analytics for eligible plans.
+# Deploy Database Migrations
+supabase migration up --linked
 
-The platform owner manages tenants, plans, and limits in the companion repo: `../ShopCMS-PlatformAdmin`.
+# Deploy Functions First
+supabase functions deploy tenant-signup --project-ref biofpmqafyjcemhffnus
+
+supabase functions deploy tenant-signup --project-ref default
+
+supabase db push --db-url "postgresql://postgres:Amira%402594@168.220.234.220:5433/postgres?sslmode=disable" --debug
+
+
+supabase db push --db-url "postgresql://postgres:Amira_2594@168.220.234.220:5433/postgres?sslmode=disable" --debug
+
+
+
+# ShopCMS Platform Admin – Project Overview
+
+## High-Level Purpose
+
+ShopCMS is a multi-tenant e‑commerce CMS built on Supabase, React, Vite, React Router, and TanStack Query.
+This repository (`ShopCMS-PlatformAdmin`) is the **platform owner’s control panel**:
+
+- Manages tenants (shops) and their lifecycle.
+- Controls subscription **plans** (Basic / Silver / Gold) and usage limits.
+- Manages plan‑based **home page templates** and design defaults.
+- Coordinates with the tenant application (`ShopCMS-Tenant`) that each shop owner uses.
+
+The companion repo `../ShopCMS-Tenant` is the **tenant-facing app**:
+
+- Public storefront (home page, categories, product pages, static pages).
+- Tenant admin panel (Dashboard, Products, Categories, Pages, Users, Settings, Home Page Builder).
+- Enforces plan limits and features per tenant.
+
+Together they form a small SaaS: the Platform Admin sells plans and configures defaults, and each Tenant app renders content and tools based on the tenant’s plan and data.
+
+## Main Business Flows (End-to-End)
+
+### 1. Tenant Creation & Plan Assignment (Platform Admin → Tenant App)
+- Platform admin logs in and navigates to `/platform/admin/tenants` via `PlatformAdminLayout.tsx`.
+- In `TenantsTab.tsx`, the admin creates a new tenant with:
+  - `name`, `slug`, `subdomain`, `status`.
+  - `plan_type` (Basic / Silver / Gold) chosen once at creation.
+- On create, `TenantsTab.tsx`:
+  - Inserts a row in `tenants`.
+  - Inserts matching limits in `tenant_limits` based on plan presets (max products, categories, carousel slides, static pages, image size).
+- Tenant app (`ShopCMS-Tenant`) later reads from `tenant_limits` (e.g. via `usePlanFeatures` and `TenantTemplateRouter`) to:
+  - Enforce **usage limits**.
+  - Decide which **template** and features are available.
+
+### 2. Plan Limits & Upgrades
+- Platform admin uses `/platform/admin/limits` (see `TenantLimitsTab.tsx`) to:
+  - Inspect and edit per-tenant `tenant_limits` rows.
+  - Change `plan_type` and adjust limits (max products, categories, etc.).
+- Tenant code uses:
+  - `usePlanFeatures.ts` to derive `PlanFeatures` such as `canAccessThemes`, `canAccessAdvancedFeatures`, and limits.
+  - `FeatureGate.tsx` and `UpgradePrompt.tsx` to hide or lock features and prompt tenants to upgrade.
+- `UsageMeter.tsx` provides visual meters for usage vs. limit and encourages upgrades when near or at limit.
+
+### 3. Template Configuration by Plan (Platform Admin)
+- `PlatformAdminLayout.tsx` sidebar exposes:
+  - **Plan Templates** links: `/platform/admin/templates/basic`, `/templates/silver`, `/templates/gold`.
+- `TemplateEditor.tsx` and `TemplateHomePageDesigner.tsx` manage template configurations stored in `plan_template_configs` and related tables:
+  - Colors, fonts, layout options, default sections, carousel style, etc.
+  - Each record is tied to a `plan_type`.
+- These settings define default “look and feel” for each plan.
+
+### 4. Tenant Home Page Rendering & Themes (Tenant App)
+- Tenant public home (`PublicHome.tsx` in `ShopCMS-Tenant`) fetches:
+  - Carousel slides, categories, sections, navbar/footer configs.
+- `TenantTemplateRouter.tsx` (in Platform Admin shared components) picks the correct React template based on `tenant_limits.plan_type`:
+  - `BasicTemplate.tsx` for `basic`.
+  - `SilverTemplate.tsx` for `silver`.
+  - `GoldTemplate.tsx` for `gold`, optionally reading a selected `theme_id` from `profiles` and `themes`.
+- Gold tenants can have additional theming (e.g. dark / light variants) based on the stored theme information.
+
+### 5. Tenant Content Management (Tenant App)
+- Authenticated tenant users access `/admin` inside `TenantApp.tsx`, which wraps pages in `AdminLayout`.
+- Important admin pages:
+  - `Dashboard.tsx` – summary stats (products, categories, pages, published products).
+  - `Products.tsx`, `Categories.tsx`, `Pages.tsx` – CRUD for core content tables.
+  - `HomePageBuilder.tsx` – tenant-specific home page layout builder.
+  - `Users.tsx`, `Settings.tsx` – user management and general shop settings.
+- Plan limits influence:
+  - How many products/categories/pages can be created.
+  - Which advanced features are accessible via `FeatureGate` and `usePlanFeatures`.
+
+### 6. Platform vs Tenant Routing
+- Platform admin app entry: `PlatformApp.tsx`:
+  - Defines `/` (landing), `/auth` (platform auth), `/platform/admin/*` (secured admin routes).
+  - Uses `PlatformAdminGuard.tsx` with Supabase auth to protect admin routes.
+- Tenant app entry: `TenantApp.tsx`:
+  - Public routes: `/`, `/category/:slug`, `/product/:slug`, `/page/:slug`, `/auth`.
+  - Tenant admin routes under `/admin` with `AdminLayout`.
+- `platformConfig.ts` defines `PLATFORM_DOMAIN` and `isPlatformDomain` to distinguish between platform and tenant domains.
+
+## Key Files and Responsibilities
+
+**Platform Admin (`ShopCMS-PlatformAdmin`):**
+- `src/PlatformApp.tsx:1` – React Router setup for platform landing, auth, and admin.
+- `src/pages/platform/PlatformAdminLayout.tsx:1` – Shell layout and sidebar for admin section.
+- `src/pages/platform/PlatformAdminGuard.tsx:1` – Supabase-based gate for `/platform/admin` routes.
+- `src/pages/platform/TenantsTab.tsx:1` – Full tenant CRUD, plan selection, and default limit creation.
+- `src/pages/platform/TenantLimitsTab.tsx:1` – Per-tenant plan limits editing and plan upgrades/downgrades.
+- `src/pages/platform/TemplatesBasic.tsx`, `TemplatesSilver.tsx`, `TemplatesGold.tsx` – Entry points for plan template editing.
+- `src/pages/platform/TemplateEditor.tsx:1` – Generic editor for `plan_type` template configuration.
+- `src/templates/BasicTemplate.tsx`, `SilverTemplate.tsx`, `GoldTemplate.tsx` – Rendered templates for tenant storefronts.
+- `src/components/TenantTemplateRouter.tsx:1` – Chooses template based on `tenant_limits.plan_type` and optional theme for Gold.
+- `src/hooks/usePlanFeatures.ts:1` – Derives plan features and limits from `tenant_limits`.
+- `src/components/FeatureGate.tsx:1` – Reusable plan-based access control wrapper.
+- `src/components/UpgradePrompt.tsx:1` – UI shown when feature requires higher plan.
+- `src/components/UsageMeter.tsx:1` – Usage vs limit visualization for products/categories/etc.
+- `src/lib/tenantCache.ts:1` – Cache invalidation helpers for tenant-specific queries.
+- `src/lib/platformConfig.ts:1` – Platform domain and helper to distinguish platform vs tenant domain.
+- `src/integrations/supabase/client.ts` – Supabase client initialization (shared dependency).
+- `src/integrations/supabase/types.ts:1` – Typed shapes of the Supabase DB (including `tenants`, `tenant_limits`, `plan_template_configs`).
+
+**Tenant App (`ShopCMS-Tenant`):**
+- `src/TenantApp.tsx:1` – Routing for tenant public site and admin panel, wired to `TenantProvider`.
+- `src/contexts/TenantContext.tsx` – Provides `tenantId` and context for tenant-specific queries.
+- `src/pages/Dashboard.tsx:1` – Tenant content stats dashboard (products, categories, pages, published count).
+- `src/pages/Products.tsx`, `Categories.tsx`, `Pages.tsx` – CRUD experiences for main content.
+- `src/pages/HomePageBuilder.tsx` – Layout builder for home page sections and carousel.
+- `src/pages/PublicHome.tsx`, `CategoryProducts.tsx`, `ProductDetail.tsx`, `StaticPage.tsx` – Public storefront pages.
+
+## Current Drawbacks and Mistakes (High-Level)
+
+**Architecture & Separation:**
+- Platform and Tenant apps share concepts (`tenant_limits`, `plan_type`, templates) but do not share a common TypeScript library:
+  - Risk of duplicated logic (e.g. plan features, types) diverging over time.
+  - Plan rules and analytics logic may be implemented twice if not centralized.
+
+**Plan Handling & Safety:**
+- `plan_type` is usually a loose `string` coming from Supabase and then cast to `'basic' | 'silver' | 'gold'` in hooks/components instead of being validated:
+  - If new plan types are added or DB values get out of sync, the UI will silently treat them as basic or break in non-obvious ways.
+  - There is no central `enum` or “plan registry” module.
+- Tenant creation (`TenantsTab.tsx`) always creates `tenant_limits` but does not handle idempotency or concurrency:
+  - Multiple attempts could create inconsistent state if not guarded by DB constraints.
+
+**Feature Gating & Usage Limits:**
+- `FeatureGate` currently only knows about **Silver** and **Gold**; there is no explicit representation of what Basic plan *can* do, only what it cannot:
+  - Harder to reason about exactly which screens are plan-restricted.
+  - Adding new plans or feature tiers will require ad hoc updates instead of configuration-driven changes.
+- Usage limits enforcement is mostly UI‑side (via counts, `UsageMeter`, etc.):
+  - It’s unclear if the backend/Supabase functions enforce limits or constraints (e.g. triggers), which is important for preventing bypass via direct API calls.
+
+**Routing & Domain Logic:**
+- `platformConfig.ts` uses a single `PLATFORM_DOMAIN` string and `isPlatformDomain` helper:
+  - Multi-environment (dev/staging/prod) handling is not clearly expressed here.
+  - There is no shared “tenant routing” helper to translate `subdomain` and `slug` into URLs consistently across Platform and Tenant UIs.
+
+**Analytics (Current State):**
+- Supabase analytics is wired via:
+  - `public.analytics_events` and `public.tenant_daily_metrics` (see `supabase/migrations/20251212090000_analytics_events.sql`).
+  - RLS policies that restrict analytics reads to Silver/Gold tenants whose `profiles.tenant_id` matches.
+  - Platform reads are enabled for `super_admin` users via `supabase/migrations/20251213091000_analytics_super_admin.sql`.
+- Tenant app (`../ShopCMS-Tenant`) now has:
+  - A shared analytics helper (`src/lib/analytics.ts`) and `useAnalytics` hook for page/product/category events.
+  - Route-based page view tracking and a plan-gated `/admin/analytics` dashboard that only Silver/Gold tenants can access.
+- Platform Admin exposes:
+  - `src/pages/platform/PlatformAnalytics.tsx` under `/platform/admin/analytics`, which shows:
+    - Tenant counts per plan.
+    - Time-windowed KPIs using the `platform_kpis(p_days)` RPC.
+    - Top tenants by traffic using the `top_tenants_by_traffic_in_range(p_days)` RPC.
+
+**Documentation & Discoverability:**
+- Existing README files in both projects are minimal and do not document:
+  - How plans work (limits, features) end to end.
+  - How platform and tenant apps communicate conceptually.
+  - How to extend with new plans or themes.
+
+## Project Motive and Achievements
+
+**Motive:**
+- Provide a multi-tenant, low-code e‑commerce CMS where:
+  - Platform admins sell tiered plans (Basic / Silver / Gold).
+  - Tenant owners can quickly configure a storefront, pages, and products.
+  - Visual templates and limits are plan-driven, enabling clear pricing tiers.
+
+**Key Achievements So Far:**
+- Multi-tenant architecture with Supabase backing:
+  - Separate `tenants`, `tenant_limits`, and content tables.
+- Clean plan-based UX:
+  - Plan badges and visual cues (`PlanBadge`, `UsageMeter`, template selection).
+  - `FeatureGate` and `UpgradePrompt` provide a solid foundation for upsells.
+- Theming & templates:
+  - Three plan-specific templates with a router (`TenantTemplateRouter`) that chooses correctly per tenant plan.
+  - Gold-specific theme support via `themes` and `profiles.theme_id`.
+- Organized React/Vite stack:
+  - Vite + React + TanStack Query + Tailwind + Radix UI.
+  - Clear separation between Platform Admin and Tenant apps.
+
+## Important Notes (For Future Development)
+
+- **Plan Types as a Source of Truth:**
+  Introduce a central `plans` module (shared between Platform and Tenant) that defines:
+  - Plan IDs (`basic`, `silver`, `gold`).
+  - Display names, feature flags, and default limits.
+  - Mapping from DB values to TypeScript types.
+
+- **Feature/Limit Enforcement:**
+  Move towards a combination of:
+  - UI gating (`FeatureGate`, `UsageMeter`).
+  - Backend enforcement (Postgres constraints or Supabase functions) for critical limits.
+
+- **Analytics Integration (Current State & Extensibility):**
+  Analytics is wired end-to-end with clear plan rules:
+  - Only **Silver** and **Gold** plan tenants see analytics menus and dashboards.
+  - Basic plan tenants do not see analytics menu items or pages and cannot read analytics tables due to RLS.
+  As you extend analytics:
+  - Add new event types or dimensions to `analytics_events` and update aggregation views/RPCs.
+  - Grow `PlatformAnalytics.tsx` into a richer cross-tenant analytics and health overview.
+
+- **Shared Code Between Platform and Tenant:**
+  Consider a small shared library or internal package (e.g. `ShopCMS-core`) for:
+  - Supabase schema types (generated once).
+  - Plan definitions and feature flags.
+  - Analytics event names and payload typings.
+
+- **Environment and Multi-Domain:**
+  As you grow:
+  - Make `PLATFORM_DOMAIN` and tenant URL construction environment-aware.
+  - Standardize URL schemes for tenant subdomains and slugs so both apps generate consistent links.
+
+- **Extensibility for New Plans:**
+  Design with future plans in mind (e.g. Platinum):
+  - Avoid hard-coded plan checks scattered across code.
+  - Use configuration-driven plan capabilities so adding a new plan is mostly data work.
 
 ---
 
-## Plans & Entitlements (Tenant Perspective)
-
-Plan information is stored in the shared Supabase database (`tenant_limits.plan_type`) and consumed in this app via:
-
-- `src/lib/plans.ts` – central plan definitions:
-  - Plans: `basic`, `silver`, `gold`.
-  - For each plan:
-    - Display label.
-    - Default limits: max products, categories, carousel slides, static pages, image size.
-    - Feature flags:
-      - `hasAnalytics` – whether the plan can see analytics dashboards.
-      - `analyticsLevel` – `none`, `standard`, or `advanced` (e.g. 90‑day history for Gold).
-      - `canAccessThemes`, `canAccessAdvancedFeatures`.
-  - Helpers:
-    - `normalizePlanType(planType)` – coerces unknown values to `basic`.
-    - `isAtLeastPlan(currentPlan, requiredPlan)` – compare plan tiers.
-    - `planSupportsAnalytics(planType)` and `getAnalyticsLevel(planType)`.
-
-- `src/hooks/usePlanFeatures.ts` – derives plan features for the current tenant:
-  - Reads `tenant_limits` for the active `tenantId` from Supabase.
-  - Returns `features` with:
-    - `planType` (normalized to `basic`/`silver`/`gold`).
-    - `hasAnalytics`, `analyticsLevel`.
-    - `canAccessThemes`, `canAccessAdvancedFeatures`.
-    - Effective limits (numeric values) – either from `tenant_limits` or plan defaults.
-
-These features are used across the tenant admin UI to:
-
-- Show plan badges, usage meters, and upgrade prompts.
-- Gate advanced features and analytics strictly to Silver/Gold where appropriate.
-
----
-
-## Analytics – Tracking & Dashboards
-
-### Backend Data Model
-
-The Supabase project defines a lightweight analytics layer (see `../ShopCMS-PlatformAdmin/supabase/migrations/20251212090000_analytics_events.sql`):
-
-- `public.analytics_events` – raw event log:
-  - `tenant_id` – which tenant the event belongs to.
-  - `event_type` – e.g. `page_view`, `product_view`, `category_view`.
-  - `path` – URL path (e.g. `/`, `/product/slug`).
-  - `product_id`, `category_id`, `page_id` – optional foreign keys.
-  - `metadata jsonb` – flexible extra data (source, referrer, etc.).
-  - `occurred_at`, `created_at` timestamps.
-
-- `public.tenant_daily_metrics` – aggregated per-tenant per-day metrics:
-  - `tenant_id`.
-  - `day` (date truncated from `occurred_at`).
-  - `page_views`, `product_views`, `category_views`.
-
-Row Level Security ensures analytics **read** access is plan- and tenant-aware:
-
-- Only users whose `profiles.tenant_id` matches `analytics_events.tenant_id` and whose tenant has `plan_type` of `silver` or `gold` can `select` from `analytics_events` and `tenant_daily_metrics`.
-- Analytics events can still be written for Basic tenants (for future upgrades), but those tenants cannot read analytics data.
-
-### Tracking Infrastructure
-
-- `src/lib/analytics.ts` – shared tracking helper:
-  - `trackAnalyticsEvent(tenantId, eventType, options)` – low-level insert into `analytics_events`.
-  - `useAnalytics()` hook:
-    - `trackPageView(path, metadata?)`.
-    - `trackProductView(productId, metadata?)`.
-    - `trackCategoryView(categoryId, metadata?)`.
-  - Always scopes events by `tenantId` from `TenantContext`.
-
-- Global route-based tracking:
-  - `src/TenantApp.tsx`:
-    - `RouteAnalyticsTracker` subscribes to `useLocation` route changes.
-    - On every route change, calls `trackPageView(location.pathname + location.search)`.
-    - Mounted once inside `<BrowserRouter>` to capture both public and admin navigation.
-  - `src/lib/analytics.ts`:
-    - Includes lightweight client-side dedupe for `page_view` events to avoid double-counting
-      (especially in React 18 StrictMode where effects run twice in development).
-
-- Page-level tracking (non-page-view events):
-  - `src/pages/CategoryProducts.tsx`:
-    - After a category is loaded, calls `trackCategoryView(category.id, { slug })`.
-  - `src/pages/ProductDetail.tsx`:
-    - After product load, calls `trackProductView(product.id, { slug, category_id: product.category_id })`.
-
-Tracking is **plan-agnostic**: events may be recorded for Basic tenants, but they will never see analytics dashboards while on Basic.
-
-### Tenant Analytics Dashboard (Silver/Gold Only)
-
-- Route & component:
-  - `src/TenantApp.tsx`:
-    - Adds `/admin/analytics` route: `<AdminLayout><Analytics /></AdminLayout>`.
-  - `src/pages/Analytics.tsx`:
-    - Uses `useTenant()` to get `tenantId`.
-    - Uses `usePlanFeatures()` to get `features.hasAnalytics` and `features.analyticsLevel`.
-    - If `!features.hasAnalytics`, immediately redirects to `/admin` (route-level guard).
-
-- Data queries (TanStack Query):
-  - Daily metrics:
-    - Fetches from `tenant_daily_metrics` for the current `tenantId` within a selectable range:
-      - Supported ranges: `7d`, `30d`, and `90d` (only when `analyticsLevel === "advanced"` – i.e. Gold).
-    - Aggregates total page views, product views, and category views for summary cards.
-  - Top products:
-    - Uses `analytics_events` (`product_view` events) for the current `tenantId` and range.
-    - Groups by `product_id`, sorts, and takes the top 5.
-    - Joins back to the `products` table for product names.
-
-- UI behavior by plan:
-  - **Basic plan (`basic`):**
-    - No “Analytics” menu item in the admin sidebar.
-    - Direct access to `/admin/analytics` redirects to `/admin`.
-    - RLS prevents any analytics data from being read even if endpoints are known.
-  - **Silver plan (`silver`):**
-    - “Analytics” menu item is visible in the admin sidebar.
-    - `/admin/analytics` shows:
-      - Summary cards (page views, product views, category views) for 7/30 days.
-      - Top products by views for the selected range.
-    - Range selector offers “Last 7 days” and “Last 30 days”.
-  - **Gold plan (`gold`):**
-    - Same as Silver plus richer history:
-      - Range selector includes “Last 90 days” (because `analyticsLevel === "advanced"`).
-    - Future enhancements (e.g. more breakdowns, segmentation) can be tied to `analyticsLevel`.
-
-### Navigation & Gating in Admin
-
-- `src/components/AdminLayout.tsx`:
-  - Uses `usePlanFeatures()` in `AppSidebar` to derive `features`.
-  - Builds menu items at runtime:
-    - Base items: Dashboard, Products, Categories, Pages, Settings, Users.
-    - If `features.hasAnalytics` is true, appends:
-      - `{ title: "Analytics", url: "/admin/analytics" }` to the sidebar menu.
-  - Result:
-    - Basic tenants never see analytics in navigation.
-    - Silver/Gold tenants see “Analytics” and can open the dashboard.
-
----
-
-## Where to Change Analytics & Plan Rules
-
-If you need to adjust how analytics behaves or which plans can see it:
-
-- Plan configuration (frontend logic):
-  - Update `PLAN_DEFINITIONS` in:
-    - `src/lib/plans.ts` (this repo).
-    - `../ShopCMS-PlatformAdmin/src/lib/plans.ts` (platform repo).
-  - Adjust `hasAnalytics` / `analyticsLevel` for each plan.
-  - Any change here automatically flows into:
-    - `usePlanFeatures`.
-    - Sidebar gating in `AdminLayout`.
-    - Range options in `Analytics.tsx`.
-
-- Backend plan enforcement:
-  - Update the RLS policy on `analytics_events` and any analytics views/RPCs in:
-    - `../ShopCMS-PlatformAdmin/supabase/migrations/20251212090000_analytics_events.sql`.
-  - Ensure that any plan allowed to read analytics data is listed in the `plan_type` checks.
-
-- Adding new events or metrics:
-  - Extend `trackAnalyticsEvent` and `useAnalytics` with more event types (e.g. `cart_add`).
-  - Store extra fields in `metadata` or add columns to `analytics_events` as needed.
-  - Add new aggregations to `tenant_daily_metrics` or new views/RPCs.
-  - Surface those new metrics in `src/pages/Analytics.tsx` or new dashboard sections.
-
----
-
-## Quick File Map (Tenant App)
-
-- Entry & routing:
-  - `src/TenantApp.tsx` – Router configuration, global QueryClient, `TenantProvider`, and `RouteAnalyticsTracker` for page views.
-  - `src/tenant-main.tsx` / `src/main.tsx` – Vite entry points.
-
-- Contexts & config:
-  - `src/contexts/TenantContext.tsx` – Resolves current tenant (by domain/subdomain/slug) and exposes `tenantId`.
-  - `src/lib/platformConfig.ts` – Platform domain detection for shared hosting.
-  - `src/lib/plans.ts` – Plan definitions and analytics entitlements.
-  - `src/hooks/usePlanFeatures.ts` – Plan-aware feature/limit hook.
-  - `src/hooks/useTenantLimits.ts` – Generic tenant limits hook.
-
-- Analytics:
-  - `src/lib/analytics.ts` – Tracking helper and `useAnalytics` hook.
-  - `src/pages/Analytics.tsx` – Plan-gated analytics dashboard (Silver/Gold only).
-
-- Admin UI:
-  - `src/components/AdminLayout.tsx` – Tenant admin shell + sidebar, including plan badge and analytics nav gating.
-  - `src/components/PlanBadge.tsx` – Visual plan indicator (Basic/Silver/Gold).
-  - `src/components/FeatureGate.tsx`, `src/components/UpgradePrompt.tsx` – Plan-based UI gating and upsell.
-
-- Public storefront:
-  - `src/pages/PublicHome.tsx` – Home page, powered by `useHomePageData` and `TenantTemplateRouter`.
-  - `src/pages/CategoryProducts.tsx`, `src/pages/ProductDetail.tsx` – Public routes with category/product view tracking.
-  - `src/pages/StaticPage.tsx` – Public static pages (page views are tracked globally via `RouteAnalyticsTracker`).
-
-This README should give you enough context to locate the analytics logic, understand how plan-based entitlements are enforced, and extend tracking or dashboards as your needs grow.
-
----
-
-## Dynamic Content Freshness (No Stale CMS Content)
-
-ShopCMS is CMS-driven, so the storefront must never briefly show old or placeholder content after an admin updates data.
-
-- Public home page data is fetched with strict freshness settings:
-  - `src/hooks/useHomePageData.ts` uses `staleTime: 0` + `refetchOnMount: "always"`.
-  - `src/pages/PublicHome.tsx` treats `isFetching` as loading and shows skeletons instead of stale UI.
-  - `src/components/TenantTemplateRouter.tsx` renders a skeleton whenever the storefront content is loading.
-- Realtime cache invalidations:
-  - `src/components/TenantRealtimeInvalidator.tsx` subscribes to Supabase Realtime per `tenant_id` and invalidates affected queries (`home-page-sections`, `carousel-slides`, `published-categories`, `tenant-site-config`, etc.).
-
-Rule of thumb: if CMS data is not loaded yet (or is being refetched), render a loading/skeleton state — never “fake” template data that looks real.
+This README is meant as a high-level architecture and business-flow overview for the Platform Admin and its relationship with the Tenant app. For detailed implementation, consult the referenced file paths in each section.
